@@ -5,95 +5,115 @@ import {
   useState,
 } from "react";
 
-import {
-  registerUser,
-  loginUser,
-  getCurrentUser,
-  logoutUser,
-} from "../services/auth.service";
+import api from "../services/api";
 
 const AuthContext = createContext(null);
 
-const TOKEN_KEY = "disease_prediction_token";
-
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-
-  const [token, setToken] = useState(() =>
-    localStorage.getItem(TOKEN_KEY)
+  const [token, setToken] = useState(
+    () => localStorage.getItem("token")
   );
-
   const [loading, setLoading] = useState(true);
 
   // ==========================================
-  // Restore authentication on page refresh
+  // Get current user
+  // ==========================================
+
+  const fetchCurrentUser = async () => {
+    try {
+      const response = await api.get("/users/me");
+
+      setUser(response.data?.data || null);
+
+      return response.data?.data;
+    } catch (error) {
+      console.error(
+        "Failed to fetch current user:",
+        error
+      );
+
+      // Invalid/expired token
+      if (error.response?.status === 401) {
+        localStorage.removeItem("token");
+        setToken(null);
+        setUser(null);
+      }
+
+      return null;
+    }
+  };
+
+  // ==========================================
+  // Restore authentication on app startup
   // ==========================================
 
   useEffect(() => {
     const restoreAuth = async () => {
-      const savedToken = localStorage.getItem(TOKEN_KEY);
-
-      if (!savedToken) {
+      if (!token) {
         setLoading(false);
         return;
       }
 
-      try {
-        const response = await getCurrentUser(savedToken);
+      await fetchCurrentUser();
 
-        setToken(savedToken);
-        setUser(response.data);
-      } catch (error) {
-        // Invalid or expired token
-        localStorage.removeItem(TOKEN_KEY);
-
-        setToken(null);
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
+      setLoading(false);
     };
 
     restoreAuth();
-  }, []);
+  }, [token]);
 
   // ==========================================
   // Login
   // ==========================================
 
   const login = async (email, password) => {
-    const response = await loginUser({
+    const response = await api.post("/auth/login", {
       email,
       password,
     });
 
-    const { user, token } = response.data;
+    const data = response.data?.data;
 
-    // Save token only after successful login
-    localStorage.setItem(TOKEN_KEY, token);
+    if (!data?.token) {
+      throw new Error("Authentication token was not returned.");
+    }
 
-    setToken(token);
-    setUser(user);
+    localStorage.setItem("token", data.token);
 
-    return user;
+    setToken(data.token);
+    setUser(data.user);
+
+    return data;
   };
 
   // ==========================================
   // Register
   // ==========================================
 
-  const register = async (name, email, password) => {
-    const response = await registerUser({
+  const register = async (
+    name,
+    email,
+    password
+  ) => {
+    const response = await api.post("/auth/register", {
       name,
       email,
       password,
     });
 
-    // Registration creates the account only.
-    // Do NOT save the returned token.
-    // User must sign in manually after registration.
+    const data = response.data?.data;
 
-    return response.data.user;
+    if (!data?.token) {
+      throw new Error("Authentication token was not returned.");
+    }
+
+    localStorage.setItem("token", data.token);
+
+    setToken(data.token);
+    setUser(data.user);
+
+    return data;
   };
 
   // ==========================================
@@ -101,7 +121,7 @@ export function AuthProvider({ children }) {
   // ==========================================
 
   const logout = () => {
-    logoutUser();
+    localStorage.removeItem("token");
 
     setToken(null);
     setUser(null);
@@ -115,12 +135,11 @@ export function AuthProvider({ children }) {
     user,
     token,
     loading,
-
-    isAuthenticated: Boolean(user && token),
-
+    isAuthenticated: Boolean(token && user),
     login,
     register,
     logout,
+    fetchCurrentUser,
   };
 
   return (
@@ -131,7 +150,7 @@ export function AuthProvider({ children }) {
 }
 
 // ==========================================
-// Custom hook
+// useAuth hook
 // ==========================================
 
 export function useAuth() {
