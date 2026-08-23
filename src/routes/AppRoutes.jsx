@@ -1,17 +1,19 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import App from "../App";
-import Landing from "../pages/Landing";
+import { Routes, Route } from "react-router-dom";
 
-function AppRoutes() {
+import App from "../App";
+
+import Landing from "../pages/Landing";
+import Login from "../pages/Login";
+import Register from "../pages/Register";
+
+export default function AppRoutes() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<App />}>
-          <Route path="/" element={<Landing />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <Routes>
+      <Route element={<App />}>
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+      </Route>
+    </Routes>
   );
 }
-
-export default AppRoutes;
