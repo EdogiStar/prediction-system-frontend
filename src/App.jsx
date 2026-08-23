@@ -1,9 +1,15 @@
+import { Outlet } from "react-router-dom";
+import Navbar from "./components/layout/Navbar";
+import Footer from "./components/layout/Footer";
+
 function App() {
   return (
-    <div className="min-h-screen">
-      <h1 className="text-3xl font-bold text-[#0F766E]">
-        Disease Prediction System
-      </h1>
+    <div className="min-h-screen bg-[#F6FAF9]">
+      <Navbar />
+
+      <Outlet />
+
+      <Footer />
     </div>
   );
 }
