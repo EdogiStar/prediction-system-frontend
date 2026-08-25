@@ -11,60 +11,87 @@ function Prediction() {
   const { user } = useAuth();
 
   const [symptoms, setSymptoms] = useState([]);
-  const [selectedSymptoms, setSelectedSymptoms] =
-    useState([]);
-
+  const [selectedSymptoms, setSelectedSymptoms] = useState([]);
   const [search, setSearch] = useState("");
-
-  const [loadingSymptoms, setLoadingSymptoms] =
-    useState(true);
-
+  const [loadingSymptoms, setLoadingSymptoms] = useState(true);
   const [predicting, setPredicting] = useState(false);
-
   const [error, setError] = useState("");
-
-  const [predictionResult, setPredictionResult] =
-    useState(null);
+  const [predictionResult, setPredictionResult] = useState(null);
 
   // ==========================================
   // Fetch available symptoms
+  // Automatically retry while ML service wakes up
   // ==========================================
 
   useEffect(() => {
+    let cancelled = false;
+
+    const wait = (milliseconds) =>
+      new Promise((resolve) => {
+        setTimeout(resolve, milliseconds);
+      });
+
     const fetchSymptoms = async () => {
+      const maxAttempts = 3;
+
       try {
         setLoadingSymptoms(true);
         setError("");
 
-        const response = await api.get(
-          "/predictions/symptoms"
-        );
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            const response = await api.get("/predictions/symptoms", {
+              timeout: 60000,
+            });
 
-        const data = response.data;
+            if (cancelled) return;
 
-        const availableSymptoms = Array.isArray(data)
-          ? data
-          : Array.isArray(data?.symptoms)
-          ? data.symptoms
-          : [];
+            const data = response.data;
 
-        setSymptoms(availableSymptoms);
+            const availableSymptoms = Array.isArray(data)
+              ? data
+              : Array.isArray(data?.symptoms)
+              ? data.symptoms
+              : [];
+
+            setSymptoms(availableSymptoms);
+
+            return;
+          } catch (err) {
+            console.error(
+              `Failed to load symptoms (attempt ${attempt}/${maxAttempts}):`,
+              err
+            );
+
+            if (attempt === maxAttempts) {
+              throw err;
+            }
+
+            // Give the ML service time to finish waking up.
+            await wait(5000);
+
+            if (cancelled) return;
+          }
+        }
       } catch (err) {
-        console.error(
-          "Failed to load symptoms:",
-          err
-        );
+        if (cancelled) return;
 
         setError(
           err.response?.data?.message ||
-            "Unable to load available symptoms. Please try again."
+            "The prediction service is waking up. Please try again in a moment."
         );
       } finally {
-        setLoadingSymptoms(false);
+        if (!cancelled) {
+          setLoadingSymptoms(false);
+        }
       }
     };
 
     fetchSymptoms();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // ==========================================
@@ -79,10 +106,7 @@ function Prediction() {
     }
 
     return symptoms.filter((symptom) =>
-      symptom
-        .replace(/_/g, " ")
-        .toLowerCase()
-        .includes(query)
+      symptom.replace(/_/g, " ").toLowerCase().includes(query)
     );
   }, [symptoms, search]);
 
@@ -93,9 +117,7 @@ function Prediction() {
   const formatSymptom = (symptom) => {
     return symptom
       .replace(/_/g, " ")
-      .replace(/\b\w/g, (letter) =>
-        letter.toUpperCase()
-      );
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
   };
 
   // ==========================================
@@ -105,9 +127,7 @@ function Prediction() {
   const toggleSymptom = (symptom) => {
     setSelectedSymptoms((current) => {
       if (current.includes(symptom)) {
-        return current.filter(
-          (item) => item !== symptom
-        );
+        return current.filter((item) => item !== symptom);
       }
 
       return [...current, symptom];
@@ -158,26 +178,18 @@ function Prediction() {
       setError("");
       setPredictionResult(null);
 
-      const response = await api.post(
-        "/predictions",
-        {
-          symptoms: selectedSymptoms,
-        }
-      );
+      const response = await api.post("/predictions", {
+        symptoms: selectedSymptoms,
+      });
 
       const result = response.data?.data;
 
       setPredictionResult(result || null);
     } catch (err) {
-      console.error(
-        "Prediction request failed:",
-        err
-      );
+      console.error("Prediction request failed:", err);
 
       if (err.response?.status === 401) {
-        setError(
-          "Your session has expired. Please sign in again."
-        );
+        setError("Your session has expired. Please sign in again.");
       } else {
         setError(
           err.response?.data?.message ||
@@ -200,16 +212,11 @@ function Prediction() {
 
     return disease
       .replace(/_/g, " ")
-      .replace(/\b\w/g, (letter) =>
-        letter.toUpperCase()
-      );
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
   };
 
   const formatConfidence = (confidence) => {
-    if (
-      confidence === null ||
-      confidence === undefined
-    ) {
+    if (confidence === null || confidence === undefined) {
       return "—";
     }
 
@@ -219,8 +226,7 @@ function Prediction() {
       return "—";
     }
 
-    const percentage =
-      value <= 1 ? value * 100 : value;
+    const percentage = value <= 1 ? value * 100 : value;
 
     return `${percentage.toFixed(1)}%`;
   };
@@ -228,7 +234,6 @@ function Prediction() {
   return (
     <main className="min-h-screen bg-[#F6FAF9]">
       <div className="mx-auto max-w-7xl px-5 py-10 sm:px-6 lg:px-8 lg:py-14">
-
         {/* Page Header */}
 
         <section className="mb-8">
@@ -243,9 +248,8 @@ function Prediction() {
               </h1>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
-                Select the symptoms you're experiencing
-                and let MediPredict provide an
-                AI-assisted prediction.
+                Select the symptoms you're experiencing and let MediPredict
+                provide an AI-assisted prediction.
               </p>
             </div>
 
@@ -277,15 +281,9 @@ function Prediction() {
               >
                 <circle cx="12" cy="12" r="9" />
 
-                <path
-                  strokeLinecap="round"
-                  d="M12 8v4"
-                />
+                <path strokeLinecap="round" d="M12 8v4" />
 
-                <path
-                  strokeLinecap="round"
-                  d="M12 16h.01"
-                />
+                <path strokeLinecap="round" d="M12 16h.01" />
               </svg>
 
               <p className="text-sm leading-5 text-red-700">
@@ -298,7 +296,6 @@ function Prediction() {
         {/* Main Prediction Area */}
 
         <section className="grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
-
           <SymptomSelector
             filteredSymptoms={filteredSymptoms}
             selectedSymptoms={selectedSymptoms}
@@ -312,7 +309,6 @@ function Prediction() {
           {/* Selected Symptoms */}
 
           <aside className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-7 md:sticky md:top-24 md:h-fit">
-
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">
@@ -322,10 +318,7 @@ function Prediction() {
                 <p className="mt-1 text-sm text-slate-500">
                   {selectedSymptoms.length > 0
                     ? `${selectedSymptoms.length} symptom${
-                        selectedSymptoms.length ===
-                        1
-                          ? ""
-                          : "s"
+                        selectedSymptoms.length === 1 ? "" : "s"
                       } selected`
                     : "Nothing selected yet"}
                 </p>
@@ -345,7 +338,6 @@ function Prediction() {
             <div className="mt-5 min-h-[170px]">
               {selectedSymptoms.length === 0 ? (
                 <div className="flex min-h-[170px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 text-center">
-
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-slate-300 shadow-sm">
                     <svg
                       viewBox="0 0 24 24"
@@ -360,11 +352,7 @@ function Prediction() {
                         d="M9 12h6M12 9v6"
                       />
 
-                      <circle
-                        cx="12"
-                        cy="12"
-                        r="9"
-                      />
+                      <circle cx="12" cy="12" r="9" />
                     </svg>
                   </div>
 
@@ -373,41 +361,34 @@ function Prediction() {
                   </p>
 
                   <p className="mt-1 max-w-xs text-xs leading-5 text-slate-400">
-                    Your selected symptoms will appear
-                    here.
+                    Your selected symptoms will appear here.
                   </p>
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {selectedSymptoms.map(
-                    (symptom) => (
-                      <button
-                        key={symptom}
-                        type="button"
-                        onClick={() =>
-                          removeSymptom(symptom)
-                        }
-                        className="group inline-flex items-center gap-2 rounded-xl bg-[#E7F5F2] px-3 py-2 text-xs font-medium text-[#0F766E] transition hover:bg-[#D5EFEB]"
-                      >
-                        <span>
-                          {formatSymptom(symptom)}
-                        </span>
+                  {selectedSymptoms.map((symptom) => (
+                    <button
+                      key={symptom}
+                      type="button"
+                      onClick={() => removeSymptom(symptom)}
+                      className="group inline-flex items-center gap-2 rounded-xl bg-[#E7F5F2] px-3 py-2 text-xs font-medium text-[#0F766E] transition hover:bg-[#D5EFEB]"
+                    >
+                      <span>{formatSymptom(symptom)}</span>
 
-                        <svg
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          className="h-3.5 w-3.5 opacity-60 transition group-hover:opacity-100"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            d="M6 6l12 12M18 6 6 18"
-                          />
-                        </svg>
-                      </button>
-                    )
-                  )}
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        className="h-3.5 w-3.5 opacity-60 transition group-hover:opacity-100"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          d="M6 6l12 12M18 6 6 18"
+                        />
+                      </svg>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -419,6 +400,7 @@ function Prediction() {
               onClick={handlePredict}
               disabled={
                 predicting ||
+                loadingSymptoms ||
                 selectedSymptoms.length < 3
               }
               className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#0F766E] px-5 text-sm font-semibold text-white transition hover:bg-[#115E59] disabled:cursor-not-allowed disabled:opacity-50"
@@ -426,7 +408,6 @@ function Prediction() {
               {predicting ? (
                 <>
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-
                   Analyzing symptoms...
                 </>
               ) : (
@@ -494,23 +475,15 @@ function Prediction() {
             >
               <circle cx="12" cy="12" r="9" />
 
-              <path
-                strokeLinecap="round"
-                d="M12 8v4"
-              />
+              <path strokeLinecap="round" d="M12 8v4" />
 
-              <path
-                strokeLinecap="round"
-                d="M12 16h.01"
-              />
+              <path strokeLinecap="round" d="M12 16h.01" />
             </svg>
 
             <p className="text-xs leading-5 text-amber-800">
-              MediPredict provides AI-assisted predictions
-              for informational purposes only. Results
-              should not be considered a medical diagnosis
-              or a substitute for professional medical
-              advice.
+              MediPredict provides AI-assisted predictions for informational
+              purposes only. Results should not be considered a medical
+              diagnosis or a substitute for professional medical advice.
             </p>
           </div>
         </div>
