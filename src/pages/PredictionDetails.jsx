@@ -8,7 +8,7 @@ export default function PredictionDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const { token } = useAuth();
+  const { user } = useAuth();
 
   const [prediction, setPrediction] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -53,20 +53,20 @@ export default function PredictionDetails() {
 
         setError(
           err.response?.data?.message ||
-            "Unable to load prediction details."
+            "Unable to load prediction details. Please try again."
         );
       } finally {
         setLoading(false);
       }
     };
 
-    if (token && id) {
+    if (user && id) {
       fetchPrediction();
-    } else {
+    } else if (!user) {
       setLoading(false);
       setError("Authentication required.");
     }
-  }, [id, token]);
+  }, [id, user]);
 
   // ==========================================
   // Helpers
@@ -139,9 +139,39 @@ export default function PredictionDetails() {
   };
 
   const formatConfidence = (confidence) => {
-    const value = getConfidenceValue(confidence);
+    return `${getConfidenceValue(confidence).toFixed(
+      1
+    )}%`;
+  };
 
-    return `${value.toFixed(1)}%`;
+  // ==========================================
+  // Parse symptoms safely
+  // ==========================================
+
+  const getSymptoms = () => {
+    if (!prediction?.symptoms) {
+      return [];
+    }
+
+    if (Array.isArray(prediction.symptoms)) {
+      return prediction.symptoms;
+    }
+
+    if (typeof prediction.symptoms === "string") {
+      try {
+        const parsed = JSON.parse(
+          prediction.symptoms
+        );
+
+        return Array.isArray(parsed)
+          ? parsed
+          : [];
+      } catch {
+        return [];
+      }
+    }
+
+    return [];
   };
 
   // ==========================================
@@ -151,17 +181,13 @@ export default function PredictionDetails() {
   if (loading) {
     return (
       <main className="min-h-screen bg-[#F6FAF9]">
-
         <div className="mx-auto max-w-5xl px-5 py-10 sm:px-6 lg:px-8 lg:py-14">
-
           <div className="flex min-h-[420px] flex-col items-center justify-center">
-
             <div className="h-9 w-9 animate-spin rounded-full border-4 border-[#0F766E]/20 border-t-[#0F766E]" />
 
             <p className="mt-4 text-sm text-slate-500">
               Loading prediction...
             </p>
-
           </div>
         </div>
       </main>
@@ -175,15 +201,11 @@ export default function PredictionDetails() {
   if (error || !prediction) {
     return (
       <main className="min-h-screen bg-[#F6FAF9]">
-
         <div className="mx-auto max-w-5xl px-5 py-10 sm:px-6 lg:px-8 lg:py-14">
-
           <div className="flex min-h-[420px] items-center justify-center">
-
             <section className="w-full max-w-lg rounded-3xl border border-slate-100 bg-white p-8 text-center shadow-sm">
 
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-red-500">
-
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -203,7 +225,6 @@ export default function PredictionDetails() {
                     d="M12 16h.01"
                   />
                 </svg>
-
               </div>
 
               <h1 className="mt-5 text-xl font-semibold text-slate-900">
@@ -216,8 +237,8 @@ export default function PredictionDetails() {
               </p>
 
               <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
-
-                {error?.includes("session") ? (
+                {error?.includes("session") ||
+                error?.includes("Authentication") ? (
                   <Link
                     to="/login"
                     className="rounded-xl bg-[#0F766E] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#115E59]"
@@ -242,9 +263,7 @@ export default function PredictionDetails() {
                 >
                   New Prediction
                 </Link>
-
               </div>
-
             </section>
           </div>
         </div>
@@ -252,11 +271,7 @@ export default function PredictionDetails() {
     );
   }
 
-  const symptoms = Array.isArray(
-    prediction.symptoms
-  )
-    ? prediction.symptoms
-    : [];
+  const symptoms = getSymptoms();
 
   const confidence = getConfidenceValue(
     prediction.confidence
@@ -268,7 +283,6 @@ export default function PredictionDetails() {
 
   return (
     <main className="min-h-screen bg-[#F6FAF9]">
-
       <div className="mx-auto max-w-5xl px-5 py-10 sm:px-6 lg:px-8 lg:py-14">
 
         {/* Back */}
@@ -304,13 +318,10 @@ export default function PredictionDetails() {
             <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
 
               <div>
-
                 <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1.5 text-xs font-medium text-[#0F766E]">
-
                   <span className="h-1.5 w-1.5 rounded-full bg-[#0F766E]" />
 
                   AI Prediction
-
                 </div>
 
                 <h1 className="text-3xl font-semibold tracking-tight text-[#16302B] sm:text-4xl">
@@ -323,7 +334,6 @@ export default function PredictionDetails() {
                   Prediction generated from your
                   reported symptoms.
                 </p>
-
               </div>
 
               <div className="shrink-0 rounded-2xl bg-white px-5 py-4 shadow-sm sm:min-w-[150px] sm:text-center">
@@ -339,11 +349,10 @@ export default function PredictionDetails() {
                 </p>
 
               </div>
-
             </div>
           </div>
 
-          {/* Confidence */}
+          {/* Confidence Bar */}
 
           <div className="px-5 py-5 sm:px-8">
 
@@ -370,7 +379,6 @@ export default function PredictionDetails() {
 
             </div>
           </div>
-
         </section>
 
         {/* Information */}
@@ -384,7 +392,6 @@ export default function PredictionDetails() {
             <div className="flex items-start justify-between gap-4">
 
               <div>
-
                 <h2 className="text-lg font-semibold text-slate-900">
                   Reported symptoms
                 </h2>
@@ -392,13 +399,11 @@ export default function PredictionDetails() {
                 <p className="mt-1 text-sm text-slate-500">
                   Symptoms used for this prediction.
                 </p>
-
               </div>
 
               <span className="rounded-lg bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-500">
                 {symptoms.length}
               </span>
-
             </div>
 
             {symptoms.length > 0 ? (
@@ -419,10 +424,9 @@ export default function PredictionDetails() {
                 No symptoms were recorded.
               </p>
             )}
-
           </section>
 
-          {/* Information */}
+          {/* Prediction Information */}
 
           <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm sm:p-7">
 
@@ -447,7 +451,6 @@ export default function PredictionDetails() {
                     prediction.created_at
                   )}
                 </span>
-
               </div>
 
               <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-4">
@@ -461,7 +464,6 @@ export default function PredictionDetails() {
                     prediction.created_at
                   )}
                 </span>
-
               </div>
 
               <div className="flex items-center justify-between gap-4">
@@ -473,13 +475,10 @@ export default function PredictionDetails() {
                 <span className="max-w-[180px] truncate text-right text-xs font-medium text-slate-400">
                   {prediction.id}
                 </span>
-
               </div>
 
             </div>
-
           </section>
-
         </div>
 
         {/* Actions */}
@@ -505,7 +504,6 @@ export default function PredictionDetails() {
                 d="M12 5v14M5 12h14"
               />
             </svg>
-
           </Link>
 
           <Link
@@ -514,7 +512,6 @@ export default function PredictionDetails() {
           >
             View prediction history
           </Link>
-
         </div>
 
         {/* Disclaimer */}
@@ -560,7 +557,6 @@ export default function PredictionDetails() {
               </p>
 
             </div>
-
           </div>
         </div>
 
