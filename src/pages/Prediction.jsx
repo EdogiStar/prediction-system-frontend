@@ -20,79 +20,44 @@ function Prediction() {
 
   // ==========================================
   // Fetch available symptoms
-  // Automatically retry while ML service wakes up
   // ==========================================
 
   useEffect(() => {
-    let cancelled = false;
+  const fetchSymptoms = async () => {
+    try {
+      setLoadingSymptoms(true);
+      setError("");
 
-    const wait = (milliseconds) =>
-      new Promise((resolve) => {
-        setTimeout(resolve, milliseconds);
-      });
+      const response = await api.get(
+        "/predictions/symptoms"
+      );
 
-    const fetchSymptoms = async () => {
-      const maxAttempts = 3;
+      const data = response.data;
 
-      try {
-        setLoadingSymptoms(true);
-        setError("");
+      const availableSymptoms = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.symptoms)
+        ? data.symptoms
+        : [];
 
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-          try {
-            const response = await api.get("/predictions/symptoms", {
-              timeout: 60000,
-            });
+      setSymptoms(availableSymptoms);
+    } catch (err) {
+      console.error(
+        "Failed to load symptoms:",
+        err
+      );
 
-            if (cancelled) return;
+      setError(
+        err.response?.data?.message ||
+          "Unable to load available symptoms. Please try again."
+      );
+    } finally {
+      setLoadingSymptoms(false);
+    }
+  };
 
-            const data = response.data;
-
-            const availableSymptoms = Array.isArray(data)
-              ? data
-              : Array.isArray(data?.symptoms)
-              ? data.symptoms
-              : [];
-
-            setSymptoms(availableSymptoms);
-
-            return;
-          } catch (err) {
-            console.error(
-              `Failed to load symptoms (attempt ${attempt}/${maxAttempts}):`,
-              err
-            );
-
-            if (attempt === maxAttempts) {
-              throw err;
-            }
-
-            // Give the ML service time to finish waking up.
-            await wait(5000);
-
-            if (cancelled) return;
-          }
-        }
-      } catch (err) {
-        if (cancelled) return;
-
-        setError(
-          err.response?.data?.message ||
-            "The prediction service is waking up. Please try again in a moment."
-        );
-      } finally {
-        if (!cancelled) {
-          setLoadingSymptoms(false);
-        }
-      }
-    };
-
-    fetchSymptoms();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  fetchSymptoms();
+}, []);
 
   // ==========================================
   // Filter symptoms

@@ -1,32 +1,10 @@
-import { useEffect } from "react";
 import { Link } from "react-router-dom";
 
 import doctorHero from "../assets/doctor-hero.jpeg";
-import api from "../services/api";
+
 
 function Landing() {
-  // ==========================================
-  // Wake up ML service in the background
-  // ==========================================
 
-  useEffect(() => {
-    const warmUpMLService = async () => {
-      try {
-        await api.get("/predictions/symptoms", {
-          timeout: 60000,
-        });
-
-        console.log("ML prediction service is awake");
-      } catch (error) {
-        // Silent failure.
-        // This request is only meant to wake up the ML service.
-        // The user should not see an error on the landing page.
-        console.log("ML service warm-up request failed");
-      }
-    };
-
-    warmUpMLService();
-  }, []);
 
   return (
     <main>
